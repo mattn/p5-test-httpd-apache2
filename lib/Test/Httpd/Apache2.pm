@@ -123,10 +123,11 @@ sub build_conf {
             "LoadModule ${_}_module $dso_path/mod_${_}.so\n"
         } @mods_to_load) : '';
     };
+    my $if_mpm = $^O eq 'MSWin32' ? '#' : '';
     my $conf = << "EOT";
 ServerRoot @{[$self->server_root]}
 PidFile @{[$self->tmpdir]}/httpd.pid
-LockFile @{[$self->tmpdir]}/httpd.lock
+${if_mpm}LockFile @{[$self->tmpdir]}/httpd.lock
 ErrorLog @{[$self->tmpdir]}/error_log
 Listen @{[$self->listen]}
 $load_modules
