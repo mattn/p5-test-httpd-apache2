@@ -27,6 +27,15 @@ our %Defaults = (
     search_paths     => [ qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin) ],
 );
 
+# workarond for win32
+my $is_win32 = $^O eq 'MSWin32';
+if ($is_win32) {
+    my @paths = map { $_ =~ s!httpd\.exe$!!; $_ }
+            glob('C:/progra~1/apach*/apach*/bin/httpd.exe');
+    for (@paths) { push @{$Defaults{search_paths}}, $_ }
+    $ENV{PATH} = join(';', $ENV{PATH}, @{$Defaults{search_paths}});
+}
+
 Class::Accessor::Lite->mk_accessors(keys %Defaults);
 
 sub new {
@@ -41,14 +50,6 @@ sub new {
     $self->listen("127.0.0.1:@{[empty_port()]}")
         unless $self->listen();
     $self->tmpdir(tempdir(CLEANUP => 1));
-
-    # workarond for win32
-    if ($^O eq 'MSWin32') {
-        $ENV{PATH} = $ENV{PATH}.';'.join(';', @{$self->search_paths},
-            map { $_ =~ s!httpd\.exe$!!; $_ }
-                glob('C:/progra~1/apach*/apach*/bin/httpd.exe')).';';
-    }
-
     $self->start()
         if $self->auto_start();
     return $self;
@@ -72,7 +73,8 @@ sub start {
         die "fork failed:$!";
     } elsif ($pid == 0) {
         # child process
-        $ENV{PATH} = join(':', $ENV{PATH}, @{$self->search_paths});
+        $ENV{PATH} = join(':', $ENV{PATH}, @{$self->search_paths})
+            unless $is_win32; # win32 sucks
         exec 'httpd', '-X', '-D', 'FOREGROUND', '-f', $self->conf_file;
         die "failed to exec httpd:$!";
     }
@@ -123,7 +125,7 @@ sub build_conf {
             "LoadModule ${_}_module $dso_path/mod_${_}.so\n"
         } @mods_to_load) : '';
     };
-    my $if_mpm = $^O eq 'MSWin32' ? '#' : '';
+    my $if_mpm = $is_win32 ? '#' : '';
     my $conf = << "EOT";
 ServerRoot @{[$self->server_root]}
 PidFile @{[$self->tmpdir]}/httpd.pid
