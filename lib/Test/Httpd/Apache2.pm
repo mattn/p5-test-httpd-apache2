@@ -41,6 +41,14 @@ sub new {
     $self->listen("127.0.0.1:@{[empty_port()]}")
         unless $self->listen();
     $self->tmpdir(tempdir(CLEANUP => 1));
+
+    # workarond for win32
+    if ($^O eq 'MSWin32') {
+        $ENV{PATH} = $ENV{PATH}.';'.join(';', @{$self->search_paths},
+            map { $_ =~ s!httpd\.exe$!!; $_ }
+                glob('C:/progra~1/apach*/apach*/bin/httpd.exe')).';';
+    }
+
     $self->start()
         if $self->auto_start();
     return $self;
@@ -179,14 +187,23 @@ sub get_dynamic_modules {
 
 sub _read_cmd {
     my ($self, @cmd) = @_;
-    my ($rfh, $wfh);
-    my $pid = open2(
-        $rfh,
-        $wfh,
-        'env',
-        join(':', "PATH=$ENV{PATH}", @{$self->search_paths}),
-        @cmd,
-    ) or die "failed to run @{[join ' ', @cmd]}:$!";
+    my ($rfh, $wfh, $pid);
+    if ($^O eq 'MSWin32') {
+        $pid = open2(
+            $rfh,
+            $wfh,
+            @cmd,
+        )
+    } else {
+        $pid = open2(
+            $rfh,
+            $wfh,
+            'env',
+            join(':', "PATH=$ENV{PATH}", @{$self->search_paths}),
+            @cmd,
+        )
+    }
+    die "failed to run @{[join ' ', @cmd]}:$!" unless $pid;
     close $wfh;
     my $lines = do { local $/; join '', <$rfh> };
     close $rfh;
